@@ -23,13 +23,16 @@ class ViewController: UIViewController {
     private var renderView: RenderView = RenderView(frame: .zero)
     private let skinSmoothFilter = HighPassSkinSmoothingFilter()
     private let lookup = ImageLUTFilter(named: "lookup")
-    private var movieFile: MovieInput!
-    
+    private var pictureInput: PictureInput!
+   
     @IBAction func didchange(_ sender: UISlider) {
         self.skinSmoothFilter.amount = sender.value
-        self.skinSmoothFilter.radius = HighPassSkinSmoothingRadius(pixels: sender.value * 20)
+        self.skinSmoothFilter.radius = HighPassSkinSmoothingRadius(pixels: sender.value * 16)
+        self.pictureInput.processImage()
     }
+    
     var asset: PHAsset?
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         self.view.insertSubviewWithConstraints(view: self.renderView)
@@ -37,40 +40,23 @@ class ViewController: UIViewController {
         guard let asset = self.asset else {
             return
         }
-        self.requestVideo(with: asset) { (asset, _) in
-            let urlAsset = asset as! AVURLAsset
-            self.movieFile = try! MovieInput(url: urlAsset.url, playAtActualSpeed: true, loop: true)
+        self.requestImage(with: asset, size: PHImageManagerMaximumSize) { (image) in
+            self.pictureInput = PictureInput(image: image!)
+            self.pictureInput.processImage()
             
-            self.movieFile --> self.lookup --> self.skinSmoothFilter --> self.renderView
-            
-            self.skinSmoothFilter.amount = 0.7
-            self.renderView.fillMode = .preserveAspectRatio
-            self.renderView.orientation = .landscapeLeft
-            self.movieFile?.start()
+            self.pictureInput --> self.lookup --> self.skinSmoothFilter --> self.renderView
         }
-        
-        
-        
     }
     
-    func requestVideo(with asset: PHAsset, completion: @escaping (AVAsset, UIImage) -> ()) {
-        let options = PHVideoRequestOptions()
+    func requestImage(with asset: PHAsset, size: CGSize,
+        completion: @escaping (UIImage?) -> ()) {
+        let options = PHImageRequestOptions()
         options.deliveryMode = .highQualityFormat
-        options.version = .original
+        options.isSynchronous = false
         options.isNetworkAccessAllowed = true
-        PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { (video, audioMix, info) in
-            if let video = video {
-                let imageGenerator = AVAssetImageGenerator(asset: video)
-                imageGenerator.maximumSize = CGSize(width: 80, height: 80)
-                imageGenerator.appliesPreferredTrackTransform = true
-                let time = CMTimeMakeWithSeconds(1.0, preferredTimescale: 1)
-                var actualTime : CMTime = CMTimeMake(value: 0, timescale: 0)
-                let image = try? imageGenerator.copyCGImage(at: time, actualTime: &actualTime)
-                if let image = image {
-                    DispatchQueue.main.async {
-                        completion(video, UIImage(cgImage: image))
-                    }
-                }
+        PHImageManager.default().requestImage(for: asset, targetSize: size, contentMode: .default, options: options) { (image, _) in
+            DispatchQueue.main.async {
+                completion(image)
             }
         }
     }

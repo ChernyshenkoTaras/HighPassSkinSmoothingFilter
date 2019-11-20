@@ -7,14 +7,11 @@
 //
 
 import GPUImage
-import UIKit
 
 class HighPassSkinSmoothingFilter: OperationGroup {
     private var dissolveFilter: DissolveBlend = DissolveBlend()
     private var sharpenFilter: Sharpen = Sharpen()
-    private var skinToneCurveFilter: ToneCurveFilter = ToneCurveFilter()
     private var maskGenerator: HighPassSkinSmoothingMaskGenerator = HighPassSkinSmoothingMaskGenerator()
-    private var currentInputSize: CGSize = .zero
     
     var amount: Float = 0.0 {
         didSet {
@@ -22,13 +19,7 @@ class HighPassSkinSmoothingFilter: OperationGroup {
             self.sharpenFilter.sharpness = self.sharpnessFactor * self.amount
         }
     }
-    
-    var controlPoints: [Position] = [] {
-        didSet {
-            self.skinToneCurveFilter.rgbCompositeControlPoints = self.controlPoints
-        }
-    }
-    
+   
     var sharpnessFactor: Float = 0.0 {
         didSet {
             self.sharpenFilter.sharpness = self.sharpnessFactor * self.amount
@@ -47,21 +38,16 @@ class HighPassSkinSmoothingFilter: OperationGroup {
         self.sharpnessFactor = 0.4
         self.radius = HighPassSkinSmoothingRadius(fraction: 4.5/750.0)
         
-        let controlPoint0 = Position(0, 0)
-        let controlPoint1 = Position(120/255.0, 146/255.0)
-        let controlPoint2 = Position(1.0, 1.0, 1.0)
-        self.controlPoints = [controlPoint0, controlPoint1, controlPoint2]
-        
         let composeFilter = BasicOperation(fragmentShader: HighpassSkinSmoothingCompositingFilterFragmentShader, numberOfInputs: 3)
         let exposureFilter = ExposureAdjustment()
         exposureFilter.exposure = -1.0
-
+        let lookup = ImageLUTFilter(named: "smooth")
       
         self.configureGroup { (input, output) in
-            self.dissolveFilter.activatePassthroughOnNextFrame = true
+//            self.dissolveFilter.activatePassthroughOnNextFrame = true
             input --> composeFilter
             input --> self.dissolveFilter
-            input --> self.skinToneCurveFilter --> self.dissolveFilter --> composeFilter
+            input --> lookup --> self.dissolveFilter --> composeFilter
             input --> exposureFilter --> self.maskGenerator --> composeFilter
          
             composeFilter --> self.sharpenFilter --> output
